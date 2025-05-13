@@ -424,305 +424,159 @@ import queue
 import threading
 import time
 from PIL import Image
-from streamlit.web.bootstrap import run
 
-# Custom CSS for styling
-def local_css(file_name):
-    try:
-        with open(file_name) as f:
-            st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
-    except:
-        st.markdown("""
-        <style>
-        /* Fallback basic styling */
-        .stApp {
-            background-color: #f5f7fa;
-        }
-        h1 {
-            color: #2c3e50;
-        }
-        .video-container {
-            border: 2px solid #3498db;
-            border-radius: 10px;
-            padding: 10px;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
-# Streamlit UI setup
+# Streamlit configuration optimized for Render
 st.set_page_config(
-    page_title="CCTV Attendance System",
-    layout="wide",
+    page_title="Attendance System",
+    layout="centered",
     page_icon="👥"
 )
 
-# Load custom CSS
-local_css("style.css")
+# Reduce memory usage by limiting face recognition
+MAX_FACES_TO_PROCESS = 3  # Process only 3 faces per frame
+PROCESS_EVERY_N_FRAMES = 5  # Skip frames to reduce load
 
-# App header
-col1, col2 = st.columns([1, 4])
+# Simplified UI to reduce overhead
+st.title("Smart Attendance System")
+st.write("Real-time face recognition for attendance tracking")
 
-with col2:
-    st.title("Smart Attendance System")
-    st.markdown("""
-    <div class="subheader">
-    Real-time face recognition for automated attendance tracking
-    </div>
-    """, unsafe_allow_html=True)
+# State management
+if 'running' not in st.session_state:
+    st.session_state.running = False
+if 'notifications' not in st.session_state:
+    st.session_state.notifications = []
 
-# Create a thread-safe way to update Streamlit elements
-class StreamlitState:
-    def __init__(self):
-        self.status = None
-        self.notifications = []
-        self.lock = threading.Lock()
-        
-    def update_status(self, message, type="info"):
-        with self.lock:
-            self.status = (message, type)
-            
-    def add_notification(self, message, type="info"):
-        with self.lock:
-            self.notifications.append((message, type))
-            
-    def get_updates(self):
-        with self.lock:
-            status = self.status
-            notifications = self.notifications.copy()
-            self.notifications.clear()
-            return status, notifications
-
-state = StreamlitState()
-
-# Sidebar for controls
+# Sidebar controls
 with st.sidebar:
-    st.header("⚙️ System Controls")
-    
     rtsp_url = st.text_input(
-        "Camera Stream URL",
-        value="rtmp://live.restream.io/live/re_9645823_6708955baaf204d73ebc",
-        help="Enter the RTSP/RTMP URL of your CCTV camera"
+        "Camera URL",
+        value="rtmp://live.restream.io/live/re_9645823_6708955baaf204d73ebc"
     )
     
-    col1, col2 = st.columns(2)
-    with col1:
-        start = st.button("▶️ Start Monitoring", key="start")
-    with col2:
-        stop = st.button("⏹️ Stop Monitoring", key="stop")
-    
-    st.markdown("---")
-    
-    st.subheader("📊 System Status")
-    status_placeholder = st.empty()
-    
-    st.subheader("📝 Today's Attendance")
-    if os.path.exists('attendance.csv'):
-        today = datetime.now().strftime('%Y-%m-%d')
-        df = pd.read_csv('attendance.csv')
-        today_df = df[df['Date'] == today]
-        st.dataframe(today_df, height=200)
-    else:
-        st.info("No attendance records yet for today")
-
-# Main content
-tab1, tab2 = st.tabs(["🎥 Live Feed", "📊 Reports"])
-
-with tab1:
-    st.markdown("""
-    <div class="video-container">
-    """, unsafe_allow_html=True)
-    
-    frame_display = st.empty()
-    
-    st.markdown("""
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.subheader("🔔 Notifications")
-    notifications_placeholder = st.empty()
-
-with tab2:
-    if os.path.exists('attendance.csv'):
-        df = pd.read_csv('attendance.csv')
+    if st.button("Start Monitoring") and not st.session_state.running:
+        st.session_state.running = True
+        st.session_state.notifications.append("System started")
         
-        st.subheader("📅 Attendance Summary")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Records", len(df))
-        with col2:
-            unique_people = df['Name'].nunique()
-            st.metric("Unique People", unique_people)
-        with col3:
-            today_count = len(df[df['Date'] == datetime.now().strftime('%Y-%m-%d')])
-            st.metric("Today's Attendance", today_count)
-        
-        st.subheader("📋 Detailed Records")
-        date_range = st.date_input(
-            "Select date range",
-            value=[datetime.now().date(), datetime.now().date()],
-            max_value=datetime.now().date()
-        )
-        
-        if len(date_range) == 2:
-            filtered_df = df[
-                (df['Date'] >= str(date_range[0])) & 
-                (df['Date'] <= str(date_range[1]))
-            ]
-            st.dataframe(filtered_df, use_container_width=True)
-    else:
-        st.info("No attendance records available yet")
+    if st.button("Stop Monitoring") and st.session_state.running:
+        st.session_state.running = False
+        st.session_state.notifications.append("System stopped")
 
 # Face recognition setup
-KNOWN_FACES_DIR = 'known_faces'
-ATTENDANCE_CSV = 'attendance.csv'
-os.makedirs(KNOWN_FACES_DIR, exist_ok=True)
-
-@st.cache_resource
 def load_known_faces():
-    images = []
-    classNames = []
-
-    if not os.path.exists(KNOWN_FACES_DIR):
-        st.warning("known_faces directory not found.")
+    try:
+        known_faces = []
+        known_names = []
+        for file in os.listdir('known_faces'):
+            img = face_recognition.load_image_file(f"known_faces/{file}")
+            encodings = face_recognition.face_encodings(img)
+            if encodings:
+                known_faces.append(encodings[0])
+                known_names.append(os.path.splitext(file)[0])
+        return known_faces, known_names
+    except Exception as e:
+        st.error(f"Error loading faces: {e}")
         return [], []
 
-    for filename in os.listdir(KNOWN_FACES_DIR):
-        img_path = os.path.join(KNOWN_FACES_DIR, filename)
-        img = cv2.imread(img_path)
-        if img is None:
-            st.warning(f"Could not read image {filename}. Skipping.")
-            continue
-        images.append(img)
-        classNames.append(os.path.splitext(filename)[0])
+known_faces, known_names = load_known_faces()
 
-    known_encodings = []
-    for img, name in zip(images, classNames):
-        try:
-            rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            enc = face_recognition.face_encodings(rgb)
-            if enc:
-                known_encodings.append(enc[0])
-            else:
-                st.warning(f"No faces found in {name}.")
-        except Exception as e:
-            st.error(f"Encoding failed for {name}: {e}")
-
-    st.success(f"Loaded {len(known_encodings)} known faces.")
-    return known_encodings, classNames
-
-known_encodings, classNames = load_known_faces()
-
-# Thread-safe attendance marking
-def mark_attendance(name):
-    now = datetime.now()
-    date = now.strftime('%Y-%m-%d')
-    time = now.strftime('%H:%M:%S')
-
-    if not os.path.exists(ATTENDANCE_CSV):
-        df = pd.DataFrame(columns=['Name', 'Date', 'Time'])
-        df.to_csv(ATTENDANCE_CSV, index=False)
-
-    df = pd.read_csv(ATTENDANCE_CSV)
-    if not ((df['Name'] == name) & (df['Date'] == date)).any():
-        df = pd.concat([df, pd.DataFrame([[name, date, time]], columns=['Name', 'Date', 'Time'])])
-        df.to_csv(ATTENDANCE_CSV, index=False)
-        state.add_notification(f"✅ {name} marked present at {time}", "success")
-
-# Video processing thread
-frame_queue = queue.Queue(maxsize=10)
-stop_event = threading.Event()
-
-def video_processing_thread(rtsp_url):
-    cap = None
+# Video processing
+def process_frame(frame, known_faces, known_names):
     try:
-        cap = cv2.VideoCapture(rtsp_url)
-        cap.set(cv2.CAP_PROP_FPS, 10)  # Reduce frame rate to lower resource usage
+        small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+        rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
         
-        if not cap.isOpened():
-            state.update_status("❌ Failed to connect to camera stream", "error")
-            return
+        face_locations = face_recognition.face_locations(rgb_small)
+        face_encodings = face_recognition.face_encodings(rgb_small, face_locations)
         
-        state.update_status("🟢 System active - Monitoring in progress", "success")
+        for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings[:MAX_FACES_TO_PROCESS]):
+            matches = face_recognition.compare_faces(known_faces, face_encoding)
+            name = "Unknown"
+            
+            if True in matches:
+                match_index = matches.index(True)
+                name = known_names[match_index]
+                mark_attendance(name)
+                
+            # Scale back up face locations
+            top *= 4
+            right *= 4
+            bottom *= 4
+            left *= 4
+            
+            # Draw rectangle and label
+            cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
+            cv2.putText(frame, name, (left, top - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
         
-        while not stop_event.is_set():
+        return frame
+    except Exception as e:
+        st.error(f"Processing error: {e}")
+        return frame
+
+def mark_attendance(name):
+    try:
+        now = datetime.now()
+        date = now.strftime('%Y-%m-%d')
+        time = now.strftime('%H:%M:%S')
+        
+        if not os.path.exists('attendance.csv'):
+            pd.DataFrame(columns=['Name', 'Date', 'Time']).to_csv('attendance.csv', index=False)
+            
+        df = pd.read_csv('attendance.csv')
+        if name not in df[df['Date'] == date]['Name'].values:
+            new_entry = pd.DataFrame([[name, date, time]], columns=['Name', 'Date', 'Time'])
+            df = pd.concat([df, new_entry])
+            df.to_csv('attendance.csv', index=False)
+            st.session_state.notifications.append(f"{name} marked present")
+    except Exception as e:
+        st.error(f"Attendance error: {e}")
+
+# Main app display
+frame_placeholder = st.empty()
+notification_placeholder = st.empty()
+
+# Video capture thread
+def video_capture_thread():
+    cap = cv2.VideoCapture(rtsp_url)
+    frame_count = 0
+    
+    try:
+        while st.session_state.running:
             ret, frame = cap.read()
             if not ret:
-                state.update_status("⚠️ Stream interruption - trying to reconnect", "warning")
+                st.error("Failed to capture frame")
                 time.sleep(1)
                 continue
-            
-            if frame_queue.full():
+                
+            frame_count += 1
+            if frame_count % PROCESS_EVERY_N_FRAMES != 0:
                 continue
                 
-            # Process every 3rd frame to reduce load
-            if int(time.time()) % 3 != 0:
-                continue
-                
-            small = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
-            rgb_small = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
-
-            faces = face_recognition.face_locations(rgb_small)
-            encodes = face_recognition.face_encodings(rgb_small, faces)
-
-            for encode_face, face_loc in zip(encodes, faces):
-                matches = face_recognition.compare_faces(known_encodings, encode_face)
-                face_dist = face_recognition.face_distance(known_encodings, encode_face)
-                match_index = np.argmin(face_dist)
-
-                if matches[match_index]:
-                    name = classNames[match_index].upper()
-                    y1, x2, y2, x1 = [v * 4 for v in face_loc]
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    cv2.putText(frame, name, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
-                    mark_attendance(name)
+            processed_frame = process_frame(frame, known_faces, known_names)
+            frame_placeholder.image(processed_frame, channels="BGR")
             
-            frame_queue.put(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-    except Exception as e:
-        state.update_status(f"❌ Error in video processing: {str(e)}", "error")
+            if st.session_state.notifications:
+                notification_placeholder.info("\n".join(st.session_state.notifications))
+                st.session_state.notifications = []
+                
+            time.sleep(0.1)
     finally:
-        if cap is not None:
-            cap.release()
-        cv2.destroyAllWindows()
-        if not stop_event.is_set():
-            state.update_status("🔴 System stopped", "info")
+        cap.release()
 
-def main():
-    # Main execution loop
-    if start:
-        stop_event.clear()
-        processing_thread = threading.Thread(
-            target=video_processing_thread, 
-            args=(rtsp_url,),
-            daemon=True
-        )
-        processing_thread.start()
+# Start thread if running
+if st.session_state.running:
+    thread = threading.Thread(target=video_capture_thread, daemon=True)
+    thread.start()
 
-    if stop:
-        stop_event.set()
-        state.update_status("🟠 Stopping system...", "info")
+# Display attendance records
+if os.path.exists('attendance.csv'):
+    st.subheader("Attendance Records")
+    df = pd.read_csv('attendance.csv')
+    st.dataframe(df)
+else:
+    st.info("No attendance records yet")
 
-    # Update UI elements
-    status_update, new_notifications = state.get_updates()
-    
-    if status_update:
-        message, type = status_update
-        if type == "success":
-            status_placeholder.success(message)
-        elif type == "error":
-            status_placeholder.error(message)
-        elif type == "warning":
-            status_placeholder.warning(message)
-        else:
-            status_placeholder.info(message)
-    
-    if new_notifications:
-        notifications_text = "\n\n".join([msg for msg, _ in new_notifications])
-        notifications_placeholder.info(notifications_text)
-    
-    if not frame_queue.empty():
-        frame_display.image(frame_queue.get(), channels="RGB")
-
+# Required for Render deployment
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8501))
-    run(__file__, [], {'server.port': port, 'server.headless': True})
-    main()
+    st.run(host='0.0.0.0', port=port)
