@@ -213,8 +213,8 @@ with st.sidebar:
     
     rtsp_url = st.text_input(
         "Camera Stream URL",
-        value="rtmp://live.restream.io/live/re_9645823_6708955baaf204d73ebc",
-        # value="rtsp://admin:going2KOKAN!@192.168.0.102:554/ch0_0.264",
+        # value="rtmp://live.restream.io/live/re_9645823_6708955baaf204d73ebc",
+        value="rtsp://admin:going2KOKAN!@192.168.0.102:554/ch0_0.264",
         help="Enter the RTSP/RTMP URL of your CCTV camera"
     )
     
