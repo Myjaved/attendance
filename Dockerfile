@@ -1,8 +1,11 @@
 FROM continuumio/miniconda3
 
+# Install system-level dependencies
+RUN apt-get update && apt-get install -y libgl1
+
 WORKDIR /app
 
-# Create conda environment and install all necessary packages
+# Create conda environment and install dependencies
 RUN conda create -n appenv python=3.9 \
  && conda install -n appenv -c conda-forge \
     dlib \
@@ -13,14 +16,11 @@ RUN conda create -n appenv python=3.9 \
     streamlit \
  && conda clean -a
 
-# Activate conda environment
+# Use conda environment for all following commands
 SHELL ["conda", "run", "-n", "appenv", "/bin/bash", "-c"]
 
-# Copy your project files
 COPY . .
 
-# Expose the port streamlit will run on
 EXPOSE 8000
 
-# Run the app with Streamlit
 CMD ["conda", "run", "-n", "appenv", "streamlit", "run", "app.py", "--server.port=8000", "--server.address=0.0.0.0"]
