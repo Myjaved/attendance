@@ -213,8 +213,8 @@ with st.sidebar:
     
     rtsp_url = st.text_input(
         "Camera Stream URL",
-        # value="rtmp://live.restream.io/live/re_9645823_6708955baaf204d73ebc",
-        value="rtsp://admin:going2KOKAN!@192.168.0.102:554/ch0_0.264",
+        value="rtmp://live.restream.io/live/re_9645823_6708955baaf204d73ebc",
+        # value="rtsp://admin:going2KOKAN!@192.168.0.102:554/ch0_0.264",
         help="Enter the RTSP/RTMP URL of your CCTV camera"
     )
     
@@ -291,24 +291,58 @@ KNOWN_FACES_DIR = 'known_faces'
 ATTENDANCE_CSV = 'attendance.csv'
 os.makedirs(KNOWN_FACES_DIR, exist_ok=True)
 
+# @st.cache_resource
+# def load_known_faces():
+#     images = []
+#     classNames = []
+#     for filename in os.listdir(KNOWN_FACES_DIR):
+#         img_path = os.path.join(KNOWN_FACES_DIR, filename)
+#         img = cv2.imread(img_path)
+#         if img is not None:
+#             images.append(img)
+#             classNames.append(os.path.splitext(filename)[0])
+
+#     known_encodings = []
+#     for img in images:
+#         rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+#         enc = face_recognition.face_encodings(rgb)
+#         if enc:
+#             known_encodings.append(enc[0])
+#     return known_encodings, classNames
+
 @st.cache_resource
 def load_known_faces():
     images = []
     classNames = []
+
+    if not os.path.exists(KNOWN_FACES_DIR):
+        st.warning("known_faces directory not found.")
+        return [], []
+
     for filename in os.listdir(KNOWN_FACES_DIR):
         img_path = os.path.join(KNOWN_FACES_DIR, filename)
         img = cv2.imread(img_path)
-        if img is not None:
-            images.append(img)
-            classNames.append(os.path.splitext(filename)[0])
+        if img is None:
+            st.warning(f"Could not read image {filename}. Skipping.")
+            continue
+        images.append(img)
+        classNames.append(os.path.splitext(filename)[0])
 
     known_encodings = []
-    for img in images:
-        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        enc = face_recognition.face_encodings(rgb)
-        if enc:
-            known_encodings.append(enc[0])
+    for img, name in zip(images, classNames):
+        try:
+            rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            enc = face_recognition.face_encodings(rgb)
+            if enc:
+                known_encodings.append(enc[0])
+            else:
+                st.warning(f"No faces found in {name}.")
+        except Exception as e:
+            st.error(f"Encoding failed for {name}: {e}")
+
+    st.success(f"Loaded {len(known_encodings)} known faces.")
     return known_encodings, classNames
+
 
 known_encodings, classNames = load_known_faces()
 
