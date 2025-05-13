@@ -1,26 +1,17 @@
-# Use Python slim image
-FROM python:3.9-slim
+FROM continuumio/miniconda3
 
-# Set working directory
 WORKDIR /app
 
-# Install system dependencies for face-recognition/dlib
-RUN apt-get update && apt-get install -y \
-    build-essential cmake \
-    libopenblas-dev liblapack-dev \
-    libx11-dev libgtk-3-dev \
-    libboost-all-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Create a conda environment and install packages
+RUN conda create -n appenv python=3.9 \
+ && conda install -n appenv -c conda-forge dlib face-recognition opencv numpy pandas \
+ && conda clean -a
 
-# Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Activate the conda environment
+SHELL ["conda", "run", "-n", "appenv", "/bin/bash", "-c"]
 
-# Copy all your project files
 COPY . .
 
-# Expose port for Streamlit
 EXPOSE 8000
 
-# Command to run your app
-CMD ["streamlit", "run", "app.py", "--server.port=8000", "--server.address=0.0.0.0"]
+CMD ["conda", "run", "-n", "appenv", "streamlit", "run", "app.py", "--server.port=8000", "--server.address=0.0.0.0"]
