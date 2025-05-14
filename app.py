@@ -412,131 +412,112 @@
 
 
 
+
+
+
 import streamlit as st
 import cv2
 import face_recognition
 import numpy as np
 import os
-from datetime import datetime
 import pandas as pd
+from datetime import datetime
 import threading
 import queue
 import time
 
-# Directories and constants
+st.set_page_config(page_title="Face Attendance", layout="wide")
+
 KNOWN_FACES_DIR = 'known_faces'
 ATTENDANCE_CSV = 'attendance.csv'
 os.makedirs(KNOWN_FACES_DIR, exist_ok=True)
 
-# Streamlit config
-st.set_page_config(page_title="Face Attendance", layout="wide")
-
 # Load known faces
 @st.cache_resource
 def load_known_faces():
-    images, classNames, known_encodings = [], [], []
-    for filename in os.listdir(KNOWN_FACES_DIR):
-        path = os.path.join(KNOWN_FACES_DIR, filename)
-        img = cv2.imread(path)
-        if img is None:
-            continue
-        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        encodings = face_recognition.face_encodings(rgb)
-        if encodings:
-            images.append(img)
-            classNames.append(os.path.splitext(filename)[0])
-            known_encodings.append(encodings[0])
-    return known_encodings, classNames
+    encodings = []
+    names = []
+    for file in os.listdir(KNOWN_FACES_DIR):
+        img = cv2.imread(os.path.join(KNOWN_FACES_DIR, file))
+        if img is not None:
+            rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            faces = face_recognition.face_encodings(rgb)
+            if faces:
+                encodings.append(faces[0])
+                names.append(os.path.splitext(file)[0])
+    return encodings, names
 
-known_encodings, classNames = load_known_faces()
+known_encodings, known_names = load_known_faces()
 
-# Attendance marker
+# Attendance logic
 def mark_attendance(name):
     now = datetime.now()
-    date, time_now = now.strftime('%Y-%m-%d'), now.strftime('%H:%M:%S')
+    date = now.strftime('%Y-%m-%d')
+    time_str = now.strftime('%H:%M:%S')
+    
     if not os.path.exists(ATTENDANCE_CSV):
-        df = pd.DataFrame(columns=["Name", "Date", "Time"])
-    else:
-        df = pd.read_csv(ATTENDANCE_CSV)
-
-    if not ((df['Name'] == name) & (df['Date'] == date)).any():
-        new_entry = pd.DataFrame([[name, date, time_now]], columns=["Name", "Date", "Time"])
-        df = pd.concat([df, new_entry], ignore_index=True)
+        df = pd.DataFrame(columns=['Name', 'Date', 'Time'])
         df.to_csv(ATTENDANCE_CSV, index=False)
 
-# Streamlit UI
-st.title("📷 Face Recognition Attendance")
-rtsp_url = st.text_input("Camera RTSP/RTMP URL", value="rtmp://live.restream.io/live/re_9645823_6708955baaf204d73ebc")
+    df = pd.read_csv(ATTENDANCE_CSV)
+    if not ((df['Name'] == name) & (df['Date'] == date)).any():
+        new_entry = pd.DataFrame([[name, date, time_str]], columns=["Name", "Date", "Time"])
+        df = pd.concat([df, new_entry])
+        df.to_csv(ATTENDANCE_CSV, index=False)
 
-start_button = st.button("Start")
-stop_button = st.button("Stop")
-
-frame_placeholder = st.empty()
-status_placeholder = st.empty()
-
+# Frame queue and stop event
 frame_queue = queue.Queue()
 stop_event = threading.Event()
 
-def run_recognition(rtsp_url):
+# Camera worker (runs in background thread)
+def camera_worker(rtsp_url):
     cap = cv2.VideoCapture(rtsp_url)
-    if not cap.isOpened():
-        status_placeholder.error("Failed to connect to camera.")
-        return
-
-    status_placeholder.success("Connected to camera. Monitoring...")
     while not stop_event.is_set():
-        success, frame = cap.read()
-        if not success:
+        ret, frame = cap.read()
+        if not ret:
             continue
 
+        # Resize & detect faces
         small = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
         rgb_small = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+
         faces = face_recognition.face_locations(rgb_small)
-        encodings = face_recognition.face_encodings(rgb_small, faces)
+        encodes = face_recognition.face_encodings(rgb_small, faces)
 
-        for encode, face_loc in zip(encodings, faces):
+        for encode, face_loc in zip(encodes, faces):
             matches = face_recognition.compare_faces(known_encodings, encode)
-            face_distances = face_recognition.face_distance(known_encodings, encode)
-            if matches:
-                best_match = np.argmin(face_distances)
-                if matches[best_match]:
-                    name = classNames[best_match]
-                    mark_attendance(name)
-                    y1, x2, y2, x1 = [v * 4 for v in face_loc]
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    cv2.putText(frame, name, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+            dist = face_recognition.face_distance(known_encodings, encode)
+            best = np.argmin(dist)
+            if matches[best]:
+                name = known_names[best].upper()
+                y1, x2, y2, x1 = [v * 4 for v in face_loc]
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0,255,0), 2)
+                cv2.putText(frame, name, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,0), 2)
+                mark_attendance(name)
 
-        if frame_queue.full():
-            try:
-                frame_queue.get_nowait()
-            except queue.Empty:
-                pass
-        frame_queue.put(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        if not frame_queue.full():
+            frame_queue.put(rgb_frame)
+        time.sleep(0.03)
 
     cap.release()
-    status_placeholder.info("Stopped monitoring.")
 
-if "monitoring" not in st.session_state:
-    st.session_state.monitoring = False
+# UI Sidebar
+st.sidebar.header("Controls")
+rtsp_url = st.sidebar.text_input("Camera URL", "rtmp://live.restream.io/live/re_9645823_6708955baaf204d73ebc")
+col1, col2 = st.sidebar.columns(2)
 
-if start_button:
-    if not st.session_state.monitoring:
-        stop_event.clear()
-        threading.Thread(target=run_recognition, args=(rtsp_url,), daemon=True).start()
-        st.session_state.monitoring = True
+if col1.button("▶️ Start"):
+    stop_event.clear()
+    threading.Thread(target=camera_worker, args=(rtsp_url,), daemon=True).start()
 
-if stop_button:
+if col2.button("⏹️ Stop"):
     stop_event.set()
-    st.session_state.monitoring = False
 
-if st.session_state.monitoring and not frame_queue.empty():
-    frame = frame_queue.get()
-    frame_placeholder.image(frame, channels="RGB")
-
-# Attendance display
-st.subheader("📝 Attendance Records")
-if os.path.exists(ATTENDANCE_CSV):
-    df = pd.read_csv(ATTENDANCE_CSV)
-    st.dataframe(df)
-else:
-    st.info("No attendance recorded yet.")
+# Live Feed Display (in main thread only)
+frame_area = st.empty()
+while True:
+    if not frame_queue.empty():
+        frame = frame_queue.get()
+        frame_area.image(frame, channels="RGB")
+    time.sleep(0.05)
