@@ -466,7 +466,7 @@ def mark_attendance(name):
 
 # Streamlit UI
 st.title("📷 Face Recognition Attendance")
-rtsp_url = st.text_input("Camera RTSP/RTMP URL", value="rtsp://192.168.0.102:554/ch0_0.264")
+rtsp_url = st.text_input("Camera RTSP/RTMP URL", value="rtmp://live.restream.io/live/re_9645823_6708955baaf204d73ebc")
 
 start_button = st.button("Start")
 stop_button = st.button("Stop")
