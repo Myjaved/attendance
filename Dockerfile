@@ -100,30 +100,27 @@
 
 
 
-FROM continuumio/miniconda3
+FROM python:3.9-slim
 
 # Install system-level dependencies
 RUN apt-get update && \
-    apt-get install -y libgl1 ffmpeg && \
-    apt-get clean
+    apt-get install -y libgl1-mesa-glx ffmpeg && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
+# Set working directory
 WORKDIR /app
 
-# Copy environment.yml before installing dependencies
-COPY environment.yml .
-
-# Create the environment
-RUN conda env create -f environment.yml
-
-# Use conda environment for all following commands
-SHELL ["conda", "run", "-n", "appenv", "/bin/bash", "-c"]
+# Copy requirements.txt and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code
 COPY . .
 
-# Expose default Streamlit port (for local dev) – optional
+# Expose default Streamlit port (for local development)
 EXPOSE 8501
 
 # Entry point
-CMD ["bash", "-c", "conda run -n appenv streamlit run app.py --server.port=$PORT --server.address=0.0.0.0 --server.enableCORS=false"]
+CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.enableCORS=false"]
 
