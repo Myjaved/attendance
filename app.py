@@ -1,130 +1,135 @@
-import streamlit as st
-import cv2
-import face_recognition
-import numpy as np
-import os
-from datetime import datetime
-import pandas as pd
-import queue
-import threading
+# import streamlit as st
+# import cv2
+# import face_recognition
+# import numpy as np
+# import os
+# from datetime import datetime
+# import pandas as pd
+# import queue
+# import threading
 
-# Streamlit UI setup
-st.set_page_config(page_title="CCTV Attendance System", layout="wide")
-st.title("📹 CCTV-Based Face Recognition Attendance")
+# # Streamlit UI setup
+# st.set_page_config(page_title="CCTV Attendance System", layout="wide")
+# st.title("📹 CCTV-Based Face Recognition Attendance")
 
-# Paths
-KNOWN_FACES_DIR = 'known_faces'
-ATTENDANCE_CSV = 'attendance.csv'
-os.makedirs(KNOWN_FACES_DIR, exist_ok=True)
+# # Paths
+# KNOWN_FACES_DIR = 'known_faces'
+# ATTENDANCE_CSV = 'attendance.csv'
+# os.makedirs(KNOWN_FACES_DIR, exist_ok=True)
 
-# Load known face encodings and names
-@st.cache_resource
-def load_known_faces():
-    images = []
-    classNames = []
-    for filename in os.listdir(KNOWN_FACES_DIR):
-        img_path = os.path.join(KNOWN_FACES_DIR, filename)
-        img = cv2.imread(img_path)
-        if img is not None:
-            images.append(img)
-            classNames.append(os.path.splitext(filename)[0])
+# # Load known face encodings and names
+# @st.cache_resource
+# def load_known_faces():
+#     images = []
+#     classNames = []
+#     for filename in os.listdir(KNOWN_FACES_DIR):
+#         img_path = os.path.join(KNOWN_FACES_DIR, filename)
+#         img = cv2.imread(img_path)
+#         if img is not None:
+#             images.append(img)
+#             classNames.append(os.path.splitext(filename)[0])
 
-    known_encodings = []
-    for img in images:
-        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        enc = face_recognition.face_encodings(rgb)
-        if enc:
-            known_encodings.append(enc[0])
-    return known_encodings, classNames
+#     known_encodings = []
+#     for img in images:
+#         rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+#         enc = face_recognition.face_encodings(rgb)
+#         if enc:
+#             known_encodings.append(enc[0])
+#     return known_encodings, classNames
 
-known_encodings, classNames = load_known_faces()
+# known_encodings, classNames = load_known_faces()
 
-# Attendance function
-def mark_attendance(name):
-    now = datetime.now()
-    date = now.strftime('%Y-%m-%d')
-    time = now.strftime('%H:%M:%S')
+# # Attendance function
+# def mark_attendance(name):
+#     now = datetime.now()
+#     date = now.strftime('%Y-%m-%d')
+#     time = now.strftime('%H:%M:%S')
 
-    if not os.path.exists(ATTENDANCE_CSV):
-        df = pd.DataFrame(columns=['Name', 'Date', 'Time'])
-        df.to_csv(ATTENDANCE_CSV, index=False)
+#     if not os.path.exists(ATTENDANCE_CSV):
+#         df = pd.DataFrame(columns=['Name', 'Date', 'Time'])
+#         df.to_csv(ATTENDANCE_CSV, index=False)
 
-    df = pd.read_csv(ATTENDANCE_CSV)
-    if not ((df['Name'] == name) & (df['Date'] == date)).any():
-        df = pd.concat([df, pd.DataFrame([[name, date, time]], columns=['Name', 'Date', 'Time'])])
-        df.to_csv(ATTENDANCE_CSV, index=False)
-        st.success(f"✅ Attendance marked for {name} at {time}")
+#     df = pd.read_csv(ATTENDANCE_CSV)
+#     if not ((df['Name'] == name) & (df['Date'] == date)).any():
+#         df = pd.concat([df, pd.DataFrame([[name, date, time]], columns=['Name', 'Date', 'Time'])])
+#         df.to_csv(ATTENDANCE_CSV, index=False)
+#         st.success(f"✅ Attendance marked for {name} at {time}")
 
-# Video processing in a separate thread
-frame_queue = queue.Queue(maxsize=10)
-stop_event = threading.Event()
+# # Video processing in a separate thread
+# frame_queue = queue.Queue(maxsize=10)
+# stop_event = threading.Event()
 
-def video_processing_thread(rtsp_url):
-    cap = cv2.VideoCapture(rtsp_url)
-    if not cap.isOpened():
-        st.error("❌ Failed to open video stream. Check the RTSP URL or camera credentials.")
-        return
+# def video_processing_thread(rtsp_url):
+#     cap = cv2.VideoCapture(rtsp_url)
+#     if not cap.isOpened():
+#         st.error("❌ Failed to open video stream. Check the RTSP URL or camera credentials.")
+#         return
     
-    try:
-        while not stop_event.is_set():
-            ret, frame = cap.read()
-            if not ret:
-                st.error("⚠️ Failed to fetch frame from stream.")
-                break
+#     try:
+#         while not stop_event.is_set():
+#             ret, frame = cap.read()
+#             if not ret:
+#                 st.error("⚠️ Failed to fetch frame from stream.")
+#                 break
             
-            # Skip frames if queue is full to prevent lag
-            if frame_queue.full():
-                continue
+#             # Skip frames if queue is full to prevent lag
+#             if frame_queue.full():
+#                 continue
                 
-            # Process frame
-            small = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
-            rgb_small = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+#             # Process frame
+#             small = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+#             rgb_small = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
 
-            faces = face_recognition.face_locations(rgb_small)
-            encodes = face_recognition.face_encodings(rgb_small, faces)
+#             faces = face_recognition.face_locations(rgb_small)
+#             encodes = face_recognition.face_encodings(rgb_small, faces)
 
-            for encode_face, face_loc in zip(encodes, faces):
-                matches = face_recognition.compare_faces(known_encodings, encode_face)
-                face_dist = face_recognition.face_distance(known_encodings, encode_face)
-                match_index = np.argmin(face_dist)
+#             for encode_face, face_loc in zip(encodes, faces):
+#                 matches = face_recognition.compare_faces(known_encodings, encode_face)
+#                 face_dist = face_recognition.face_distance(known_encodings, encode_face)
+#                 match_index = np.argmin(face_dist)
 
-                if matches[match_index]:
-                    name = classNames[match_index].upper()
-                    y1, x2, y2, x1 = [v * 4 for v in face_loc]
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    cv2.putText(frame, name, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
-                    mark_attendance(name)
+#                 if matches[match_index]:
+#                     name = classNames[match_index].upper()
+#                     y1, x2, y2, x1 = [v * 4 for v in face_loc]
+#                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+#                     cv2.putText(frame, name, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+#                     mark_attendance(name)
             
-            # Put processed frame in queue
-            frame_queue.put(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-    finally:
-        cap.release()
+#             # Put processed frame in queue
+#             frame_queue.put(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+#     finally:
+#         cap.release()
 
-# Streamlit UI
-# rtsp_url = "rtsp://admin:going2KOKAN!@192.168.0.102:554/ch0_0.264"
+# # Streamlit UI
+# # rtsp_url = "rtsp://admin:going2KOKAN!@192.168.0.102:554/ch0_0.264"
 # rtsp_url = "rtmp://live.restream.io/live/re_9645823_6708955baaf204d73ebc"
-rtsp_url = "rtsp://wowzaec2demo.streamlock.net/vod/mp4:BigBuckBunny_115k.mov"
-start = st.button("▶️ Start Attendance")
-stop = st.button("⏹️ Stop Attendance")
-frame_display = st.empty()
+# start = st.button("▶️ Start Attendance")
+# stop = st.button("⏹️ Stop Attendance")
+# frame_display = st.empty()
 
-if start:
-    stop_event.clear()
-    processing_thread = threading.Thread(target=video_processing_thread, args=(rtsp_url,))
-    processing_thread.start()
+# if start:
+#     stop_event.clear()
+#     processing_thread = threading.Thread(target=video_processing_thread, args=(rtsp_url,))
+#     processing_thread.start()
     
-    st.info("Press Stop or Refresh to end the session.")
+#     st.info("Press Stop or Refresh to end the session.")
     
-    try:
-        while not stop_event.is_set():
-            if not frame_queue.empty():
-                frame_display.image(frame_queue.get(), channels="RGB")
-    except:
-        stop_event.set()
-        processing_thread.join()
+#     try:
+#         while not stop_event.is_set():
+#             if not frame_queue.empty():
+#                 frame_display.image(frame_queue.get(), channels="RGB")
+#     except:
+#         stop_event.set()
+#         processing_thread.join()
 
-if stop:
-    stop_event.set()
+# if stop:
+#     stop_event.set()
+
+
+
+
+
+
 
 
 
@@ -522,3 +527,148 @@ if stop:
 #         frame = frame_queue.get()
 #         frame_area.image(frame, channels="RGB")
 #     time.sleep(0.05)
+
+
+
+
+
+
+
+
+
+
+
+
+
+import streamlit as st
+import cv2
+import face_recognition
+import numpy as np
+import os
+import pandas as pd
+from datetime import datetime
+import queue
+import threading
+import subprocess
+import logging
+
+# Logging for Render logs
+logging.basicConfig(level=logging.INFO)
+
+# Streamlit setup
+st.set_page_config(page_title="CCTV Attendance System", layout="wide")
+st.title("📹 CCTV-Based Face Recognition Attendance System")
+
+# Constants
+KNOWN_FACES_DIR = 'known_faces'
+ATTENDANCE_CSV = 'attendance.csv'
+FRAME_WIDTH, FRAME_HEIGHT = 640, 480
+
+os.makedirs(KNOWN_FACES_DIR, exist_ok=True)
+
+# Load known faces
+@st.cache_resource
+def load_known_faces():
+    images, names = [], []
+    for filename in os.listdir(KNOWN_FACES_DIR):
+        path = os.path.join(KNOWN_FACES_DIR, filename)
+        img = cv2.imread(path)
+        if img is not None:
+            rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            enc = face_recognition.face_encodings(rgb)
+            if enc:
+                images.append(enc[0])
+                names.append(os.path.splitext(filename)[0])
+    return images, names
+
+known_encodings, classNames = load_known_faces()
+
+# Attendance marking
+def mark_attendance(name):
+    now = datetime.now()
+    date, time = now.strftime('%Y-%m-%d'), now.strftime('%H:%M:%S')
+    
+    if not os.path.exists(ATTENDANCE_CSV):
+        pd.DataFrame(columns=['Name', 'Date', 'Time']).to_csv(ATTENDANCE_CSV, index=False)
+
+    df = pd.read_csv(ATTENDANCE_CSV)
+    if not ((df['Name'] == name) & (df['Date'] == date)).any():
+        df = pd.concat([df, pd.DataFrame([[name, date, time]], columns=['Name', 'Date', 'Time'])])
+        df.to_csv(ATTENDANCE_CSV, index=False)
+        st.success(f"✅ Attendance marked for {name} at {time}")
+
+# Frame processing via ffmpeg
+def get_ffmpeg_process(url):
+    return subprocess.Popen([
+        'ffmpeg',
+        '-i', url,
+        '-f', 'image2pipe',
+        '-pix_fmt', 'bgr24',
+        '-vcodec', 'rawvideo', '-'
+    ], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+frame_queue = queue.Queue(maxsize=10)
+stop_event = threading.Event()
+
+def video_processing_thread(rtmp_url):
+    process = get_ffmpeg_process(rtmp_url)
+    frame_size = FRAME_WIDTH * FRAME_HEIGHT * 3
+
+    try:
+        while not stop_event.is_set():
+            raw_frame = process.stdout.read(frame_size)
+            if len(raw_frame) != frame_size:
+                logging.error("Incomplete frame received.")
+                break
+
+            frame = np.frombuffer(raw_frame, np.uint8).reshape((FRAME_HEIGHT, FRAME_WIDTH, 3))
+            
+            # Resize for processing
+            small = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+            rgb_small = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+
+            faces = face_recognition.face_locations(rgb_small)
+            encodings = face_recognition.face_encodings(rgb_small, faces)
+
+            for encoding, loc in zip(encodings, faces):
+                matches = face_recognition.compare_faces(known_encodings, encoding)
+                dist = face_recognition.face_distance(known_encodings, encoding)
+                if matches and any(matches):
+                    match_index = np.argmin(dist)
+                    if matches[match_index]:
+                        name = classNames[match_index].upper()
+                        y1, x2, y2, x1 = [v * 4 for v in loc]
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                        cv2.putText(frame, name, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+                        mark_attendance(name)
+
+            if not frame_queue.full():
+                frame_queue.put(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+
+    finally:
+        process.terminate()
+        logging.info("Video stream ended.")
+
+# UI elements
+rtmp_url = st.text_input("📡 Enter RTMP Stream URL", value="rtmp://live.restream.io/live/re_9645823_6708955baaf204d73ebc")
+start = st.button("▶️ Start Attendance")
+stop = st.button("⏹️ Stop Attendance")
+frame_display = st.empty()
+
+if start:
+    stop_event.clear()
+    thread = threading.Thread(target=video_processing_thread, args=(rtmp_url,))
+    thread.start()
+    st.info("ℹ️ Attendance monitoring started. Press Stop to end.")
+    
+    try:
+        while not stop_event.is_set():
+            if not frame_queue.empty():
+                frame = frame_queue.get()
+                frame_display.image(frame, channels="RGB")
+    except:
+        stop_event.set()
+        thread.join()
+
+if stop:
+    stop_event.set()
