@@ -100,21 +100,27 @@
 
 
 
-FROM bamos/system76-dlib:cpu
+FROM python:3.9-slim
+
+# Install system-level dependencies
+RUN apt-get update && \
+    apt-get install -y build-essential cmake libopenblas-dev liblapack-dev libx11-dev libgtk-3-dev ffmpeg && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Install Streamlit and other dependencies
-RUN pip install --upgrade pip && \
-    pip install streamlit==1.45.0 numpy==1.24.4 pandas==1.5.3 pillow==10.3.0 imageio imageio-ffmpeg opencv-python-headless==4.5.5.64
+# Copy requirements.txt and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the app code
+# Copy the rest of the application code
 COPY . .
 
-# Expose Streamlit's port
+# Expose default Streamlit port
 EXPOSE 8501
 
-# Command to run the Streamlit app
+# Entry point
 CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.enableCORS=false"]
 
