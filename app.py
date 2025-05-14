@@ -525,6 +525,7 @@
 
 
 
+
 import streamlit as st
 import cv2
 import face_recognition
@@ -539,7 +540,7 @@ import time
 st.set_page_config(page_title="Face Attendance", layout="wide")
 
 KNOWN_FACES_DIR = 'known_faces'
-ATTENDANCE_CSV = 'attendance.csv'
+ATTENDANCE_CSV = '/tmp/attendance.csv'  # Use /tmp for Render-safe temp writes
 os.makedirs(KNOWN_FACES_DIR, exist_ok=True)
 
 # Load known faces
@@ -564,7 +565,7 @@ def mark_attendance(name):
     now = datetime.now()
     date = now.strftime('%Y-%m-%d')
     time_str = now.strftime('%H:%M:%S')
-    
+
     if not os.path.exists(ATTENDANCE_CSV):
         df = pd.DataFrame(columns=['Name', 'Date', 'Time'])
         df.to_csv(ATTENDANCE_CSV, index=False)
@@ -572,24 +573,16 @@ def mark_attendance(name):
     df = pd.read_csv(ATTENDANCE_CSV)
     if not ((df['Name'] == name) & (df['Date'] == date)).any():
         new_entry = pd.DataFrame([[name, date, time_str]], columns=["Name", "Date", "Time"])
-        df = pd.concat([df, new_entry], ignore_index=True)
+        df = pd.concat([df, new_entry])
         df.to_csv(ATTENDANCE_CSV, index=False)
 
-# Frame queue and stop flag
-frame_queue = queue.Queue(maxsize=1)
+# Frame queue and stop event
+frame_queue = queue.Queue()
 stop_event = threading.Event()
 
-# Thread-safe status flag
-if 'running' not in st.session_state:
-    st.session_state.running = False
-
-# Camera worker
+# Camera worker (background thread)
 def camera_worker(rtsp_url):
     cap = cv2.VideoCapture(rtsp_url)
-    if not cap.isOpened():
-        print("Failed to open video stream")
-        return
-
     while not stop_event.is_set():
         ret, frame = cap.read()
         if not ret:
@@ -616,29 +609,32 @@ def camera_worker(rtsp_url):
         if not frame_queue.full():
             frame_queue.put(rgb_frame)
         time.sleep(0.03)
-
     cap.release()
 
-# Sidebar Controls
+# UI
 st.sidebar.header("Controls")
-rtsp_url = st.sidebar.text_input("RTSP Camera URL", "rtmp://live.restream.io/live/re_9645823_6708955baaf204d73ebc")
-
+rtsp_url = st.sidebar.text_input("Camera URL", "rtmp://live.restream.io/live/re_9645823_6708955baaf204d73ebc")
 col1, col2 = st.sidebar.columns(2)
+
+if 'camera_running' not in st.session_state:
+    st.session_state.camera_running = False
+
 if col1.button("▶️ Start"):
-    stop_event.clear()
-    st.session_state.running = True
-    threading.Thread(target=camera_worker, args=(rtsp_url,), daemon=True).start()
+    if not st.session_state.camera_running:
+        stop_event.clear()
+        threading.Thread(target=camera_worker, args=(rtsp_url,), daemon=True).start()
+        st.session_state.camera_running = True
 
 if col2.button("⏹️ Stop"):
     stop_event.set()
-    st.session_state.running = False
+    st.session_state.camera_running = False
 
-# Live feed
+# Live feed display
 frame_area = st.empty()
 
-if st.session_state.running:
-    while st.session_state.running and not stop_event.is_set():
-        if not frame_queue.empty():
-            frame = frame_queue.get()
-            frame_area.image(frame, channels="RGB")
-        time.sleep(0.05)
+if st.session_state.camera_running and not frame_queue.empty():
+    frame = frame_queue.get()
+    frame_area.image(frame, channels="RGB")
+
+# Auto-refresh (simulate real-time updates)
+st.experimental_rerun()

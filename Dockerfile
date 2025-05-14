@@ -21,6 +21,7 @@ SHELL ["conda", "run", "-n", "appenv", "/bin/bash", "-c"]
 
 COPY . .
 
-EXPOSE 8000
+EXPOSE 8501
 
-CMD ["conda", "run", "-n", "appenv", "streamlit", "run", "app.py", "--server.port=8000", "--server.address=0.0.0.0"]
+CMD ["conda", "run", "-n", "appenv", "streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.enableCORS=false"]
+
