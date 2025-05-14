@@ -467,7 +467,7 @@ with col2:
 with st.sidebar:
     st.header("⚙️ System Controls")
 
-    rtsp_url = st.text_input("Camera Stream URL", value="rtsp://...", help="Enter RTSP/RTMP URL")
+    rtsp_url = st.text_input("Camera Stream URL", value="rtmp://live.restream.io/live/re_9645823_6708955baaf204d73ebc", help="Enter RTSP/RTMP URL")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -520,19 +520,55 @@ os.makedirs(KNOWN_FACES_DIR, exist_ok=True)
 
 @st.cache_resource
 def load_known_faces():
-    images, names = [], []
+    import signal
+
+    KNOWN_FACES_DIR = 'known_faces'
+    images = []
+    classNames = []
+    known_encodings = []
+
+    if not os.path.exists(KNOWN_FACES_DIR):
+        st.warning("known_faces directory not found.")
+        return [], []
+
+    # Timeout handler
+    class TimeoutException(Exception): pass
+
+    def handler(signum, frame):
+        raise TimeoutException("Encoding took too long")
+
+    signal.signal(signal.SIGALRM, handler)
+
     for filename in os.listdir(KNOWN_FACES_DIR):
-        path = os.path.join(KNOWN_FACES_DIR, filename)
-        img = cv2.imread(path)
-        if img is not None:
-            images.append(img)
-            names.append(os.path.splitext(filename)[0])
-    encodings = []
-    for img in images:
+        name = os.path.splitext(filename)[0]
+        img_path = os.path.join(KNOWN_FACES_DIR, filename)
+        img = cv2.imread(img_path)
+
+        if img is None:
+            st.warning(f"⚠️ Could not read image: {filename}")
+            continue
+
         rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        face_enc = face_recognition.face_encodings(rgb)
-        if face_enc: encodings.append(face_enc[0])
-    return encodings, names
+
+        try:
+            # Set timeout of 3 seconds for encoding
+            signal.alarm(3)
+            encodings = face_recognition.face_encodings(rgb)
+            signal.alarm(0)  # Cancel alarm
+            if encodings:
+                known_encodings.append(encodings[0])
+                classNames.append(name)
+                st.info(f"✅ Loaded: {name}")
+            else:
+                st.warning(f"😕 No face found in {filename}")
+        except TimeoutException:
+            st.error(f"⏳ Timeout while encoding {filename}")
+        except Exception as e:
+            st.error(f"❌ Failed to encode {filename}: {e}")
+
+    st.success(f"🎉 Loaded {len(known_encodings)} face(s)")
+    return known_encodings, classNames
+
 
 known_encodings, classNames = load_known_faces()
 
