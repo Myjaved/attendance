@@ -102,7 +102,8 @@ def video_processing_thread(rtsp_url):
 
 # Streamlit UI
 # rtsp_url = "rtsp://admin:going2KOKAN!@192.168.0.102:554/ch0_0.264"
-rtsp_url = "rtmp://live.restream.io/live/re_9645823_6708955baaf204d73ebc"
+# rtsp_url = "rtmp://live.restream.io/live/re_9645823_6708955baaf204d73ebc"
+rtsp_url = "rtsp://wowzaec2demo.streamlock.net/vod/mp4:BigBuckBunny_115k.mov"
 start = st.button("▶️ Start Attendance")
 stop = st.button("⏹️ Stop Attendance")
 frame_display = st.empty()
