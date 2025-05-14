@@ -640,5 +640,5 @@ if st.session_state.running:
     while st.session_state.running and not stop_event.is_set():
         if not frame_queue.empty():
             frame = frame_queue.get()
-            frame_area.image(frame, channels="RGB", use_column_width=True)
+            frame_area.image(frame, channels="RGB")
         time.sleep(0.05)
