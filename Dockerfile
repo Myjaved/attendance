@@ -54,5 +54,4 @@ COPY . .
 EXPOSE 8501
 
 # ✅ Use the PORT environment variable provided by Railway
-# CMD ["bash", "-c", "conda run -n appenv streamlit run app.py --server.port=$PORT --server.address=0.0.0.0"]
-CMD ["conda", "run", "-n", "appenv", "streamlit", "run", "app.py", "--server.address=0.0.0.0"]
+CMD ["bash", "-c", "conda run -n appenv streamlit run app.py --server.port=$PORT --server.address=0.0.0.0"]
