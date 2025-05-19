@@ -27,32 +27,56 @@
 
 
 
-FROM continuumio/miniconda3
+# FROM continuumio/miniconda3
 
-# Install system-level dependencies
-RUN apt-get update && apt-get install -y libgl1
+# # Install system-level dependencies
+# RUN apt-get update && apt-get install -y libgl1
+
+# WORKDIR /app
+
+# # Create conda environment and install dependencies
+# RUN conda create -n appenv python=3.9 \
+#  && conda install -n appenv -c conda-forge \
+#     dlib \
+#     face-recognition \
+#     opencv \
+#     numpy \
+#     pandas \
+#     streamlit \
+#  && conda clean -a
+
+# # Use conda environment for all following commands
+# SHELL ["conda", "run", "-n", "appenv", "/bin/bash", "-c"]
+
+# COPY . .
+
+# # Expose default Streamlit port (for local dev) – optional
+# EXPOSE 8501
+
+# # ✅ Use the PORT environment variable provided by Railway
+# # CMD ["bash", "-c", "conda run -n appenv streamlit run app.py --server.port=$PORT --server.address=0.0.0.0 --server.enableCORS=false"]
+# CMD ["conda", "run", "-n", "appenv", "streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.enableCORS=false"]
+
+
+
+FROM python:3.9-slim
+
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    libgl1 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Create conda environment and install dependencies
-RUN conda create -n appenv python=3.9 \
- && conda install -n appenv -c conda-forge \
-    dlib \
-    face-recognition \
-    opencv \
-    numpy \
-    pandas \
-    streamlit \
- && conda clean -a
-
-# Use conda environment for all following commands
-SHELL ["conda", "run", "-n", "appenv", "/bin/bash", "-c"]
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Expose default Streamlit port (for local dev) – optional
 EXPOSE 8501
 
-# ✅ Use the PORT environment variable provided by Railway
-# CMD ["bash", "-c", "conda run -n appenv streamlit run app.py --server.port=$PORT --server.address=0.0.0.0 --server.enableCORS=false"]
-CMD ["conda", "run", "-n", "appenv", "streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.enableCORS=false"]
+CMD ["streamlit", "run", "app.py", 
+     "--server.address=0.0.0.0", 
+     "--server.enableCORS=false", 
+     "--server.enableXsrfProtection=false"]  # Both flags explicitly disabled
