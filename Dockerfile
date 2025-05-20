@@ -80,21 +80,54 @@
 # CMD ["sh", "-c", "streamlit run app.py --server.address=0.0.0.0 --server.port=$PORT --server.enableCORS=false --server.enableXsrfProtection=false"]
 
 
+# FROM python:3.10-slim
+
+# RUN apt-get update && apt-get install -y \
+#     ffmpeg libsm6 libxext6 libgl1-mesa-glx libglib2.0-0 \
+#     build-essential cmake \
+#     libboost-all-dev \
+#     libopenblas-dev liblapack-dev libatlas-base-dev libx11-dev \
+#     && rm -rf /var/lib/apt/lists/*
+
+# WORKDIR /app
+# COPY . .
+
+# RUN pip install --upgrade pip
+# RUN pip install --no-cache-dir -r requirements.txt
+
+# EXPOSE 8080
+
+# CMD ["streamlit", "run", "app.py", "--server.port=8080", "--server.address=0.0.0.0"]
+
+
+
 FROM python:3.10-slim
 
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     ffmpeg libsm6 libxext6 libgl1-mesa-glx libglib2.0-0 \
     build-essential cmake \
     libboost-all-dev \
     libopenblas-dev liblapack-dev libatlas-base-dev libx11-dev \
+    libpython3-dev python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Set working directory
 WORKDIR /app
+
+# Copy app files
 COPY . .
 
+# Upgrade pip & install Python dependencies
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Set Streamlit configuration
+ENV STREAMLIT_SERVER_PORT=8080
+ENV STREAMLIT_SERVER_HEADLESS=true
+ENV STREAMLIT_SERVER_ENABLECORS=false
+
 EXPOSE 8080
 
+# Run Streamlit app
 CMD ["streamlit", "run", "app.py", "--server.port=8080", "--server.address=0.0.0.0"]
