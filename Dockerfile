@@ -58,23 +58,43 @@
 
 
 
-FROM python:3.9-slim
+# FROM python:3.9-slim
 
-# System packages for dlib & OpenCV
+# # System packages for dlib & OpenCV
+# RUN apt-get update && apt-get install -y \
+#     build-essential cmake \
+#     libgl1 libglib2.0-0 libxext6 libsm6 libxrender1 \
+#     && rm -rf /var/lib/apt/lists/*
+
+# WORKDIR /app
+
+# # Install Python dependencies
+# COPY requirements.txt .
+# RUN pip install --no-cache-dir -r requirements.txt
+
+# # Copy app files
+# COPY . .
+
+# EXPOSE 8501
+
+# CMD ["sh", "-c", "streamlit run app.py --server.address=0.0.0.0 --server.port=$PORT --server.enableCORS=false --server.enableXsrfProtection=false"]
+
+
+FROM python:3.10-slim
+
 RUN apt-get update && apt-get install -y \
+    ffmpeg libsm6 libxext6 libgl1-mesa-glx libglib2.0-0 \
     build-essential cmake \
-    libgl1 libglib2.0-0 libxext6 libsm6 libxrender1 \
+    libboost-all-dev \
+    libopenblas-dev liblapack-dev libatlas-base-dev libx11-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
-# Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy app files
 COPY . .
 
-EXPOSE 8501
+RUN pip install --upgrade pip
+RUN pip install --no-cache-dir -r requirements.txt
 
-CMD ["sh", "-c", "streamlit run app.py --server.address=0.0.0.0 --server.port=$PORT --server.enableCORS=false --server.enableXsrfProtection=false"]
+EXPOSE 8000
+
+CMD ["streamlit", "run", "app.py", "--server.port=8000", "--server.address=0.0.0.0"]
