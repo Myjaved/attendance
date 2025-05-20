@@ -950,17 +950,52 @@ def mark_attendance(name):
 # === Video Thread ===
 stop_event = threading.Event()
 
+# def video_thread(rtsp_url, encodings, names):
+#     cap = cv2.VideoCapture(rtsp_url)
+#     if not cap.isOpened():
+#         print("❌ Could not connect to stream.")
+#         return
+#     print("✅ Video stream opened.")
+
+#     try:
+#         while not stop_event.is_set():
+#             ret, frame = cap.read()
+#             if not ret:
+#                 continue
+
+#             small = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+#             rgb_small = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+
+#             face_locations = face_recognition.face_locations(rgb_small)
+#             face_encodings = face_recognition.face_encodings(rgb_small, face_locations)
+
+#             for face_encoding in face_encodings:
+#                 matches = face_recognition.compare_faces(encodings, face_encoding)
+#                 face_distances = face_recognition.face_distance(encodings, face_encoding)
+#                 if matches:
+#                     best_match_index = np.argmin(face_distances)
+#                     if matches[best_match_index]:
+#                         name = names[best_match_index].upper()
+#                         mark_attendance(name)
+#     finally:
+#         cap.release()
+#         print("🛑 Stream released.")
+
+
 def video_thread(rtsp_url, encodings, names):
     cap = cv2.VideoCapture(rtsp_url)
     if not cap.isOpened():
         print("❌ Could not connect to stream.")
         return
     print("✅ Video stream opened.")
-
+    frame_count = 0
     try:
         while not stop_event.is_set():
             ret, frame = cap.read()
             if not ret:
+                continue
+            frame_count += 1
+            if frame_count % 10 != 0:  # process only every 10th frame
                 continue
 
             small = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
@@ -980,6 +1015,7 @@ def video_thread(rtsp_url, encodings, names):
     finally:
         cap.release()
         print("🛑 Stream released.")
+
 
 # === Streamlit UI ===
 st.set_page_config("Smart Attendance", layout="wide")
