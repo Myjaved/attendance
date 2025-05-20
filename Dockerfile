@@ -101,33 +101,34 @@
 
 
 
-FROM python:3.10-slim
+FROM continuumio/miniconda3
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    ffmpeg libsm6 libxext6 libgl1-mesa-glx libglib2.0-0 \
-    build-essential cmake \
-    libboost-all-dev \
-    libopenblas-dev liblapack-dev libatlas-base-dev libx11-dev \
-    libpython3-dev python3-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Minimal OS-level dependencies (libgl1 required by OpenCV)
+RUN apt-get update && apt-get install -y libgl1 && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Copy app files
+# Create conda env and install all dependencies including ffmpeg
+RUN conda create -n appenv python=3.9 \
+ && conda install -n appenv -c conda-forge \
+    dlib \
+    face-recognition \
+    opencv \
+    ffmpeg \
+    numpy \
+    pandas \
+    streamlit \
+ && conda clean -a
+
+# Set conda as default shell
+SHELL ["conda", "run", "-n", "appenv", "/bin/bash", "-c"]
+
+# Copy source files
 COPY . .
 
-# Upgrade pip & install Python dependencies
-RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+# Expose Streamlit port
+EXPOSE 8501
 
-# Set Streamlit configuration
-ENV STREAMLIT_SERVER_PORT=8080
-ENV STREAMLIT_SERVER_HEADLESS=true
-ENV STREAMLIT_SERVER_ENABLECORS=false
-
-EXPOSE 8080
-
-# Run Streamlit app
-CMD ["streamlit", "run", "app.py", "--server.port=8080", "--server.address=0.0.0.0"]
+# Run the app using the environment's Python
+CMD ["bash", "-c", "conda run -n appenv streamlit run app.py --server.port=$PORT --server.address=0.0.0.0"]
