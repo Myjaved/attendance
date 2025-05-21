@@ -131,4 +131,5 @@ COPY . .
 EXPOSE 8501
 
 # Run the app using the environment's Python
-CMD ["bash", "-c", "conda run -n appenv streamlit run app.py --server.port=$PORT --server.address=0.0.0.0"]
+# CMD ["bash", "-c", "conda run -n appenv streamlit run app.py --server.port=$PORT --server.address=0.0.0.0"]
+CMD ["conda", "run", "-n", "appenv", "streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
