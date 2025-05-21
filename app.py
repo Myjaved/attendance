@@ -900,55 +900,87 @@
 
 
 
-import streamlit as st
-import cv2
-import face_recognition
-import numpy as np
-import os
-import pandas as pd
-from datetime import datetime
-import threading
+# import streamlit as st
+# import cv2
+# import face_recognition
+# import numpy as np
+# import os
+# import pandas as pd
+# from datetime import datetime
+# import threading
 
-# === Constants ===
-KNOWN_FACES_DIR = 'known_faces'
-ATTENDANCE_CSV = 'attendance.csv'
-os.makedirs(KNOWN_FACES_DIR, exist_ok=True)
+# # === Constants ===
+# KNOWN_FACES_DIR = 'known_faces'
+# ATTENDANCE_CSV = 'attendance.csv'
+# os.makedirs(KNOWN_FACES_DIR, exist_ok=True)
 
-# === Helper: Load known faces ===
-def load_known_faces():
-    images, names = [], []
-    for file in os.listdir(KNOWN_FACES_DIR):
-        img = cv2.imread(os.path.join(KNOWN_FACES_DIR, file))
-        if img is not None:
-            images.append(img)
-            names.append(os.path.splitext(file)[0])
-    encodings = []
-    for img in images:
-        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        enc = face_recognition.face_encodings(rgb)
-        if enc:
-            encodings.append(enc[0])
-    # Free memory
-    del images
-    return encodings, names
+# # === Helper: Load known faces ===
+# def load_known_faces():
+#     images, names = [], []
+#     for file in os.listdir(KNOWN_FACES_DIR):
+#         img = cv2.imread(os.path.join(KNOWN_FACES_DIR, file))
+#         if img is not None:
+#             images.append(img)
+#             names.append(os.path.splitext(file)[0])
+#     encodings = []
+#     for img in images:
+#         rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+#         enc = face_recognition.face_encodings(rgb)
+#         if enc:
+#             encodings.append(enc[0])
+#     # Free memory
+#     del images
+#     return encodings, names
 
-# === Helper: Mark attendance ===
-def mark_attendance(name):
-    now = datetime.now()
-    date, time = now.strftime('%Y-%m-%d'), now.strftime('%H:%M:%S')
+# # === Helper: Mark attendance ===
+# def mark_attendance(name):
+#     now = datetime.now()
+#     date, time = now.strftime('%Y-%m-%d'), now.strftime('%H:%M:%S')
 
-    if not os.path.exists(ATTENDANCE_CSV):
-        pd.DataFrame(columns=['Name', 'Date', 'Time']).to_csv(ATTENDANCE_CSV, index=False)
+#     if not os.path.exists(ATTENDANCE_CSV):
+#         pd.DataFrame(columns=['Name', 'Date', 'Time']).to_csv(ATTENDANCE_CSV, index=False)
 
-    df = pd.read_csv(ATTENDANCE_CSV)
-    if not ((df['Name'] == name) & (df['Date'] == date)).any():
-        new_entry = pd.DataFrame([[name, date, time]], columns=['Name', 'Date', 'Time'])
-        df = pd.concat([df, new_entry])
-        df.to_csv(ATTENDANCE_CSV, index=False)
-        print(f"[INFO] Marked present: {name} at {time}")
+#     df = pd.read_csv(ATTENDANCE_CSV)
+#     if not ((df['Name'] == name) & (df['Date'] == date)).any():
+#         new_entry = pd.DataFrame([[name, date, time]], columns=['Name', 'Date', 'Time'])
+#         df = pd.concat([df, new_entry])
+#         df.to_csv(ATTENDANCE_CSV, index=False)
+#         print(f"[INFO] Marked present: {name} at {time}")
 
-# === Video Thread ===
-stop_event = threading.Event()
+# # === Video Thread ===
+# stop_event = threading.Event()
+
+# # def video_thread(rtsp_url, encodings, names):
+# #     cap = cv2.VideoCapture(rtsp_url)
+# #     if not cap.isOpened():
+# #         print("❌ Could not connect to stream.")
+# #         return
+# #     print("✅ Video stream opened.")
+
+# #     try:
+# #         while not stop_event.is_set():
+# #             ret, frame = cap.read()
+# #             if not ret:
+# #                 continue
+
+# #             small = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+# #             rgb_small = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+
+# #             face_locations = face_recognition.face_locations(rgb_small)
+# #             face_encodings = face_recognition.face_encodings(rgb_small, face_locations)
+
+# #             for face_encoding in face_encodings:
+# #                 matches = face_recognition.compare_faces(encodings, face_encoding)
+# #                 face_distances = face_recognition.face_distance(encodings, face_encoding)
+# #                 if matches:
+# #                     best_match_index = np.argmin(face_distances)
+# #                     if matches[best_match_index]:
+# #                         name = names[best_match_index].upper()
+# #                         mark_attendance(name)
+# #     finally:
+# #         cap.release()
+# #         print("🛑 Stream released.")
+
 
 # def video_thread(rtsp_url, encodings, names):
 #     cap = cv2.VideoCapture(rtsp_url)
@@ -956,11 +988,14 @@ stop_event = threading.Event()
 #         print("❌ Could not connect to stream.")
 #         return
 #     print("✅ Video stream opened.")
-
+#     frame_count = 0
 #     try:
 #         while not stop_event.is_set():
 #             ret, frame = cap.read()
 #             if not ret:
+#                 continue
+#             frame_count += 1
+#             if frame_count % 10 != 0:  # process only every 10th frame
 #                 continue
 
 #             small = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
@@ -982,6 +1017,106 @@ stop_event = threading.Event()
 #         print("🛑 Stream released.")
 
 
+# # === Streamlit UI ===
+# st.set_page_config("Smart Attendance", layout="wide")
+# st.title("🎯 Smart Attendance System (RTSP Stream)")
+
+# # Sidebar
+# with st.sidebar:
+#     st.header("Controls")
+#     rtsp_url = st.text_input("RTSP/RTMP URL", value="")
+#     start_btn = st.button("▶️ Start Monitoring")
+#     stop_btn = st.button("⏹️ Stop Monitoring")
+
+# # Start Monitoring
+# if start_btn:
+#     with st.spinner("🔄 Loading known faces..."):
+#         encodings, names = load_known_faces()
+
+#     if len(encodings) == 0:
+#         st.error("No valid face encodings found. Please add face images to `known_faces` folder.")
+#     else:
+#         if not stop_event.is_set():
+#             stop_event.clear()
+#             thread = threading.Thread(
+#                 target=video_thread,
+#                 args=(rtsp_url, encodings, names)
+#             )
+#             thread.daemon = True
+#             thread.start()
+#             st.success("🟢 Monitoring started!")
+
+# # Stop Monitoring
+# if stop_btn:
+#     stop_event.set()
+#     st.warning("🛑 Monitoring stopped.")
+
+# # Attendance Report
+# st.markdown("## 📅 Today's Attendance")
+# if os.path.exists(ATTENDANCE_CSV):
+#     df = pd.read_csv(ATTENDANCE_CSV)
+#     today = datetime.now().strftime('%Y-%m-%d')
+#     df_today = df[df["Date"] == today]
+#     st.dataframe(df_today, height=300)
+# else:
+#     st.info("No attendance yet for today.")
+
+
+
+
+import streamlit as st
+import cv2
+import face_recognition
+import numpy as np
+import os
+import pandas as pd
+from datetime import datetime
+import threading
+from queue import Queue
+import time
+
+# === Constants ===
+KNOWN_FACES_DIR = 'known_faces'
+ATTENDANCE_CSV = 'attendance.csv'
+os.makedirs(KNOWN_FACES_DIR, exist_ok=True)
+
+# === Shared State ===
+stop_event = threading.Event()
+result_queue = Queue()
+
+# === Helper: Load known faces ===
+def load_known_faces():
+    images, names = [], []
+    for file in os.listdir(KNOWN_FACES_DIR):
+        img = cv2.imread(os.path.join(KNOWN_FACES_DIR, file))
+        if img is not None:
+            images.append(img)
+            names.append(os.path.splitext(file)[0])
+    encodings = []
+    for img in images:
+        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        enc = face_recognition.face_encodings(rgb)
+        if enc:
+            encodings.append(enc[0])
+    del images
+    return encodings, names
+
+# === Helper: Mark attendance ===
+def mark_attendance(name):
+    now = datetime.now()
+    date, time_str = now.strftime('%Y-%m-%d'), now.strftime('%H:%M:%S')
+
+    if not os.path.exists(ATTENDANCE_CSV):
+        pd.DataFrame(columns=['Name', 'Date', 'Time']).to_csv(ATTENDANCE_CSV, index=False)
+
+    df = pd.read_csv(ATTENDANCE_CSV)
+    if not ((df['Name'] == name) & (df['Date'] == date)).any():
+        new_entry = pd.DataFrame([[name, date, time_str]], columns=['Name', 'Date', 'Time'])
+        df = pd.concat([df, new_entry])
+        df.to_csv(ATTENDANCE_CSV, index=False)
+        print(f"[INFO] Marked present: {name} at {time_str}")
+
+# === Video Thread ===
 def video_thread(rtsp_url, encodings, names):
     cap = cv2.VideoCapture(rtsp_url)
     if not cap.isOpened():
@@ -995,7 +1130,7 @@ def video_thread(rtsp_url, encodings, names):
             if not ret:
                 continue
             frame_count += 1
-            if frame_count % 10 != 0:  # process only every 10th frame
+            if frame_count % 10 != 0:
                 continue
 
             small = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
@@ -1012,14 +1147,15 @@ def video_thread(rtsp_url, encodings, names):
                     if matches[best_match_index]:
                         name = names[best_match_index].upper()
                         mark_attendance(name)
+                        print(f"[INFO] Detected and marked: {name}")
+                        result_queue.put(name)
     finally:
         cap.release()
         print("🛑 Stream released.")
 
-
 # === Streamlit UI ===
 st.set_page_config("Smart Attendance", layout="wide")
-st.title("🎯 Smart Attendance System (RTSP Stream)")
+st.title("🎯 Smart Attendance System (RTMP Stream)")
 
 # Sidebar
 with st.sidebar:
@@ -1027,6 +1163,18 @@ with st.sidebar:
     rtsp_url = st.text_input("RTSP/RTMP URL", value="")
     start_btn = st.button("▶️ Start Monitoring")
     stop_btn = st.button("⏹️ Stop Monitoring")
+
+# Detected Name Area
+detected_name_area = st.empty()
+
+# UI Loop to display detection alerts
+def show_detection_alerts():
+    while not stop_event.is_set():
+        try:
+            name = result_queue.get(timeout=1)
+            detected_name_area.success(f"✅ Face Detected: {name}")
+        except:
+            pass
 
 # Start Monitoring
 if start_btn:
@@ -1038,12 +1186,14 @@ if start_btn:
     else:
         if not stop_event.is_set():
             stop_event.clear()
-            thread = threading.Thread(
-                target=video_thread,
-                args=(rtsp_url, encodings, names)
-            )
+            thread = threading.Thread(target=video_thread, args=(rtsp_url, encodings, names))
             thread.daemon = True
             thread.start()
+
+            ui_thread = threading.Thread(target=show_detection_alerts)
+            ui_thread.daemon = True
+            ui_thread.start()
+
             st.success("🟢 Monitoring started!")
 
 # Stop Monitoring
